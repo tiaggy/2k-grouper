@@ -1,0 +1,14 @@
+# Secrets & local config — NEVER commit
+.env
+
+# Runtime data written by the bot
+events.jsonl
+tracked_chats.json
+bot.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
