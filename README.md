@@ -1,81 +1,89 @@
-# Telegram capture bot — private, shadow mode (Phase 1)
+# 2K Grouper — Telegram attendance capture bot
 
-Reads messages in your client group(s), classifies `+` / `-` / sick notes, and
-logs them to `events.jsonl`. **It writes nothing to Notion and posts nothing
-into the groups** — this phase exists to measure how workers actually phrase
-things before we trust any auto-write. See `../telegram-capture-plan.md`.
+A private, owner-scoped Telegram bot that reads `+` / `-` clock-in/out messages
+(and free-text sick / vacation / holiday notes) from client work-chat groups,
+classifies them, and writes one row per event to a Notion **Capture Log** —
+linked to Telegram accounts, tracked groups, and (via your Applicant Tracker)
+the people behind them.
 
-"Private" means: it only acts on chats you allow-list, only obeys commands from
-you (the owner), isn't published anywhere, and keeps its token in `.env`.
+- **Rules first:** a lone `+`/`-` line is classified instantly, no AI call.
+  `+` = clock in. `-` closes the day if there was a clock-in that day (or an
+  open `+` within 16h, for overnight shifts); otherwise it's `unresolved`
+  (ambiguous — not enough context to call it a day off).
+- **AI for everything else** (optional): free-text notes ("sick today",
+  "vacation 12-16.01") go to an OpenAI-compatible model, with a cheap fallback
+  model if the primary is down. Casual chat/greetings are filtered locally
+  and never sent to a model.
+- **A day with more than one record** — unless it's a clean clock-in +
+  clock-out pair — is ambiguous, so every record that day is marked
+  `unresolved` rather than guessed.
+- **Daily missing sweep:** at the start of each weekday, every worker expected
+  to report (active recently) but with no record yet is marked `missing`;
+  each `missing` row is replaced by their real record the moment they report.
+- **Resilient by design:** if Notion or the AI backend goes down, the bot
+  pauses and durably spools incoming messages locally instead of dropping or
+  misclassifying them, then drains the spool and catches up missed days once
+  the dependency recovers. Owners get a DM on pause/recovery.
+- **Config lives in Notion**, not `.env`: owners, ignored users, and tracked
+  groups are rows in Notion databases, editable without a restart. `.env`
+  holds only secrets and toggles.
+- **Owner surface:** DM the bot `/dashboard` for uptime, quick links to the
+  Notion databases, and buttons to toggle AI-assist / debug logging / restart
+  the bot. It posts nothing into the tracked groups.
 
----
+## Quick start (local)
 
-## 1. Create the bot (Telegram, one-time)
-
-In Telegram, open a chat with **@BotFather**:
-
-1. Send `/newbot`, choose a name and a username (must end in `bot`).
-2. BotFather replies with an **API token** — copy it.
-3. **Disable privacy mode so the bot can see normal messages** (critical — by
-   default it only sees `/commands`):
-   - `/setprivacy` → pick your bot → **Disable**.
-4. *(optional, tightens it)* `/setjoingroups` → **Enable** (you need it in
-   groups) and don't publish the bot anywhere.
-
-## 2. Configure
-
-```
-cd telegram-bot
-copy .env.example .env        # PowerShell:  Copy-Item .env.example .env
-```
-
-Edit `.env`:
-- `TELEGRAM_BOT_TOKEN` = the token from BotFather.
-- Leave `OWNER_USER_ID` and `ALLOWED_CHAT_IDS` empty for now.
-- `ANTHROPIC_API_KEY` = optional; without it the bot still runs (rules only, and
-  free-text notes get marked `other` for manual review).
-
-## 3. Install and run
-
-```
+```bash
 py -m pip install -r requirements.txt
+copy .env.example .env        # PowerShell: Copy-Item .env.example .env
+# fill in .env — see the comments in .env.example for every key
 py bot.py
 ```
 
-## 4. Discover the ids (first run)
+First run: message the bot privately as an owner to see `/dashboard`; add it
+to a group as an owner to start tracking that group (a Tracked Groups row is
+created automatically).
 
-With the bot running:
+## Running in Docker (recommended for a VPS)
 
-1. Message the bot **`/whoami`** in a private chat → it replies with **your**
-   `user_id`. Put that in `.env` as `OWNER_USER_ID`.
-2. Add the bot to **one** pilot client group. In that group send **`/chatid`**
-   (as the owner) → it replies with the group's `chat_id` (a negative number).
-   Put that in `ALLOWED_CHAT_IDS`.
-3. Stop the bot (Ctrl+C) and start it again to load the new values.
-
-Now the bot ignores every chat except the allow-listed group, and every message
-in that group is classified and appended to `events.jsonl`.
-
-## 5. What a log line looks like
-
-```json
-{"captured_at":"2026-07-10T08:01:22Z","chat_id":-1001234567890,"chat_title":"Client X",
- "user_id":111,"username":"vpetrov","full_name":"Viktor Petrov","text":"+",
- "intent":"clock_in","confidence":0.99,"source":"rule","dates":[]}
+```bash
+docker compose up -d --build
+docker compose logs -f
 ```
 
-Review `events.jsonl` after a few real days to see how accurate the classifier
-is and how workers phrase sick notes. That evidence drives Phase 2 (the Notion
-"Pending Inbox" + one-tap confirmation) and Phase 3 (auto-write of
-high-confidence records).
+See **[README.docker.md](README.docker.md)** for the container details (why it
+publishes no ports, and the Docker + UFW firewall gotcha) and
+**[DEPLOY.md](DEPLOY.md)** for a full VPS deployment walkthrough.
 
----
+## Maintenance tools
 
-## Notes / safety
+- `py missing.py [date [end-date]]` — run the missing-sweep standalone/backfill.
+- `py simulate_bot.py` — replay the full message history (`../msgs`,
+  `../new_msgs`) through the live classification rules and reconcile the
+  Capture Log to match. Resumable, rate-limit-safe; useful for rebuilding after
+  a schema change or backfilling an export.
 
-- The bot opens the group **read-only** in spirit: it never edits or deletes
-  anything, and (in shadow mode) never posts into the group.
-- The only outbound messages are `/whoami` and `/chatid` replies to the owner.
-- To go beyond shadow mode later, set `SHADOW_MODE = False` in `config.py` —
-  but don't, until the Notion write + confirmation flow exists.
-- Keep `.env` out of version control. Rotate the token in BotFather if it leaks.
+## Project layout
+
+| File | Role |
+|---|---|
+| `bot.py` | Poll loop, message handling, dashboard, owner commands |
+| `classifier.py` | Rule-based grammar + AI fallback (with model failover) |
+| `notion.py` | Capture Log reads/writes (new data-source API) |
+| `notionconfig.py` | Bot Config / Tracked Groups (legacy API) |
+| `notionaccounts.py` | Telegram Accounts registry |
+| `notion_http.py` | Shared retry/backoff policy for all Notion HTTP calls |
+| `missing.py` | The missing-worker sweep |
+| `tracking.py` | Offline cache of tracked group ids (Notion is authoritative) |
+| `storage.py` | Local JSONL audit log of every captured event |
+| `config.py` | All environment configuration |
+
+## Security notes
+
+- `.env` is git-ignored — never commit it. If any token in it was ever shared
+  outside this machine, rotate it.
+- The bot only acts on Notion-tracked chats and only obeys commands from
+  Notion-listed owners (with a single `.env` fallback owner in case Notion is
+  unreachable).
+- Container runs as a non-root user; publishes no inbound ports (long-polling
+  is outbound-only).

@@ -1,8 +1,6 @@
-"""Append captured events to a JSONL log (shadow mode).
-
-Later this module is where the Notion write / Pending Inbox logic will live.
-For now it only records what the bot saw and how it classified it, so we can
-measure accuracy before trusting any auto-write.
+"""Append every captured event to a local JSONL audit log, independent of the
+Notion write (notion.py) — so there's always a local record of what the bot saw
+and how it classified it, even if a Notion write fails.
 """
 from __future__ import annotations
 

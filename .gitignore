@@ -1,10 +1,14 @@
 # Secrets & local config — NEVER commit
 .env
 
-# Runtime data written by the bot
+# Runtime data written by the bot (or by maintenance scripts run locally)
 events.jsonl
-tracked_chats.json
-bot.out
+tracked_cache.json
+dashboard_msg.json
+missing_state.json
+progress.json
+spool.jsonl
+*.out
 
 # Python
 __pycache__/

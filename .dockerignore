@@ -1,0 +1,26 @@
+# Secrets — never bake into the image (passed at runtime via env_file)
+.env
+.env.*
+
+# Runtime state (persisted on the /data volume, not in the image)
+*.jsonl
+progress.json
+missing_state.json
+dashboard_msg.json
+tracked_cache.json
+*.out
+
+# Maintenance/offline tool not needed in the running container (see README.md)
+simulate_bot.py
+
+# Python / VCS / docs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.git
+.gitignore
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore

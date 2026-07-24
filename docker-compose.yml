@@ -1,0 +1,30 @@
+# Run:  docker compose up -d --build
+# Logs: docker compose logs -f
+#
+# NO `ports:` here on purpose. The bot is long-polling / outbound-only, so it needs
+# no inbound port. That also sidesteps the Docker + UFW gotcha (see README.docker.md):
+# publishing a port would insert DOCKER iptables rules that bypass UFW. Since we
+# publish nothing, there is nothing for UFW to fail to block.
+services:
+  bot:
+    build: .
+    image: group2k-bot:latest
+    container_name: group2k-bot
+    restart: unless-stopped
+    env_file: .env            # secrets + toggles (never committed)
+    environment:
+      # Local time drives the start-of-day missing sweep + weekend detection.
+      - TZ=${TZ:-Europe/Kyiv}
+      - STATE_DIR=/data
+      - EXIT_ON_RESTART=1     # owner Restart button → exit; compose relaunches it
+    volumes:
+      - bot-state:/data       # persist progress / spool / caches / events log
+    # Keep the container from hoarding logs on a small VPS.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-state:
