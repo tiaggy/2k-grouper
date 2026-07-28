@@ -67,9 +67,9 @@
     }
   }
 
-  function dayCell(code, dateIso, colors, editCtx, legend) {
+  function dayCell(code, dateIso, colors, editCtx, legend, preStart) {
     const td = document.createElement("td");
-    td.className = "day-cell" + (isWeekend(dateIso) ? " weekend" : "");
+    td.className = "day-cell" + (isWeekend(dateIso) || preStart ? " weekend" : "");
     if (code) {
       td.classList.add("has-code");
       td.textContent = code;
@@ -178,11 +178,13 @@
       nameTd.textContent = name;
       tr.appendChild(nameTd);
       const accountId = accountIdByName.get(name);
+      const startIso = firstDate.get(name);
       for (const { week, m } of weekLookup) {
         const days = m.get(name);
         const editCtx = week.approved ? null : { groupId: team.group_id, accountId };
         week.table.days.forEach((iso, i) => {
-          const td = dayCell(days ? days[iso] : null, iso, colors, editCtx, legend);
+          const preStart = !!startIso && iso < startIso;
+          const td = dayCell(days ? days[iso] : null, iso, colors, editCtx, legend, preStart);
           if (i === 0) td.classList.add("week-start-border");
           tr.appendChild(td);
         });
