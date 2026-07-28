@@ -8,6 +8,7 @@ progress.json
 missing_state.json
 dashboard_msg.json
 tracked_cache.json
+dashboard_cache.db
 *.out
 
 # Maintenance/offline tool not needed in the running container (see README.md)

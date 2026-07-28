@@ -8,6 +8,7 @@ dashboard_msg.json
 missing_state.json
 progress.json
 spool.jsonl
+dashboard_cache.db
 *.out
 
 # Python

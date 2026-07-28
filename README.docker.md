@@ -1,8 +1,14 @@
-# Running the bot in Docker
+# Running this project in Docker
 
-The bot is a **long-polling Telegram bot**: it makes only *outbound* HTTPS calls
-(to Telegram, Notion and the AI endpoint) and **listens on no ports**. That keeps
-the container attack surface tiny and makes the firewall story simple.
+Two independent services, one `docker-compose.yml`:
+
+| Service | What it is | Network posture |
+|---|---|---|
+| `bot` | The long-polling Telegram bot | **Outbound only** — publishes no ports |
+| `dashboard` | The read-only attendance web dashboard | Publishes **one** port, bound to loopback by default |
+
+They share the same `.env` (Notion/secrets) but run as separate images, processes,
+and volumes — restarting or rebuilding one never touches the other.
 
 ## Quick start
 
@@ -10,23 +16,27 @@ the container attack surface tiny and makes the firewall story simple.
 # 1. Put secrets/toggles in .env (never committed). At minimum:
 #    TELEGRAM_BOT_TOKEN, NOTION_TOKEN, NOTION_DB_ID, NOTION_DB_DS_ID,
 #    NOTION_CONFIG_DB_ID, NOTION_TRACKED_DB_ID, NOTION_ACCOUNTS_DB_ID,
-#    OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL, AI_ASSIST, OWNER_USER_ID
-# 2. Set the timezone for the start-of-day missing sweep / weekend logic:
+#    NOTION_APPROVALS_DB_ID, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL,
+#    AI_ASSIST, OWNER_USER_ID, DASHBOARD_APPROVE_TOKEN
+# 2. Set the timezone (drives the bot's start-of-day sweep AND the dashboard's
+#    week boundaries):
 export TZ=Europe/Kyiv          # or Asia/Baku, etc.
 
-docker compose up -d --build   # build image + start detached
-docker compose logs -f         # follow logs
-docker compose down            # stop (state survives on the volume)
+docker compose up -d --build   # builds + starts BOTH services, detached
+docker compose logs -f         # follow logs (both); add a service name to filter
+docker compose down            # stop both (state survives on their volumes)
+
+# Just one service:
+docker compose up -d --build bot
+docker compose up -d --build dashboard
 ```
 
-State (`progress.json`, `spool.jsonl`, `events.jsonl`, caches, dashboard id) lives
-on the named volume **`bot-state`** mounted at `/data`, so restarts and rebuilds
-resume cleanly. The per-group resume markers (`Last Msg ID`) also live in Notion,
-so even a fresh volume resumes without reprocessing.
+State lives on named volumes, one per service (`bot-state`, `dashboard-state`),
+so restarts and rebuilds resume cleanly. The bot's Restart button and resume
+markers work the same as always — see the main README for that.
 
-The owner **Restart** button works in Docker: `EXIT_ON_RESTART=1` makes the bot
-exit, and `restart: unless-stopped` relaunches it (self-respawning inside a
-container would kill PID 1).
+The dashboard, once up, is reachable at **`http://127.0.0.1:8000`** on the host
+it's running on (see below for reaching it from elsewhere).
 
 ---
 
@@ -42,38 +52,73 @@ ufw deny 8080         # looks blocked...
 docker run -p 8080:8080 someimage   # ...but the world can reach 8080 anyway
 ```
 
-### How this project avoids it
+### The bot: avoids this entirely
 
-**We publish no ports.** The bot needs no inbound connection (long-polling), so
-`docker-compose.yml` has **no `ports:` section** and the `Dockerfile` `EXPOSE`s
-nothing. With nothing published, Docker inserts no bypassing rules — there is
-nothing for UFW to fail to block. This is the safest posture and needs no extra
-firewall config.
+The bot needs no inbound connection (long-polling), so it publishes **no ports**
+at all — `EXPOSE`s nothing, no `ports:` entry. With nothing published, Docker
+inserts no bypassing rules; there's nothing for UFW to fail to block.
 
-### If you ever DO publish a port
+### The dashboard: publishes a port, so this DOES apply
 
-(e.g. you later add a webhook or a metrics endpoint) don't just `-p 9000:9000`.
-Do one of:
+The dashboard is a real web page — it has to listen somewhere. `docker-compose.yml`
+binds it to **loopback only**:
 
-1. **Bind to loopback only** and reach it via an SSH tunnel or a reverse proxy on
-   the same host:
-   ```yaml
-   ports:
-     - "127.0.0.1:9000:9000"   # not reachable from outside the host
-   ```
-2. **Install [`ufw-docker`](https://github.com/chaifeng/ufw-docker)** so UFW rules
-   actually govern container ports:
-   ```bash
-   ufw-docker install && ufw route allow proto tcp from any to any port 9000
-   ```
-3. **Disable Docker's iptables manipulation** (`"iptables": false` in
-   `/etc/docker/daemon.json`) and manage all rules yourself — advanced, and it
-   breaks inter-container networking unless you set it up carefully.
+```yaml
+ports:
+  - "127.0.0.1:8000:8000"   # NOT reachable from outside this host, UFW or not
+```
 
-Prefer option 1 or "publish nothing" whenever possible.
+This is deliberate and is the safe default: from a fresh `docker compose up`, the
+dashboard is reachable only from processes running on the same machine — no
+firewall rule needed, because there's nothing exposed to the network to firewall
+in the first place.
+
+### Reaching the dashboard from elsewhere
+
+Pick one, depending on who needs access:
+
+**Just you, occasionally (simplest, no server changes):**
+```bash
+ssh -L 8000:localhost:8000 you@your-vps
+# then open http://localhost:8000 on your own machine
+```
+
+**Your team, over the internet (a real reverse proxy with TLS):**
+Put [Caddy](https://caddyserver.com/) or nginx in front, terminating TLS on 443/80
+(which you *do* open in UFW) and proxying to `127.0.0.1:8000`. A minimal Caddyfile:
+```
+attendance.yourdomain.com {
+    reverse_proxy 127.0.0.1:8000
+    basicauth {
+        teamlead $2a$14$...   # caddy hash-password
+    }
+}
+```
+Caddy gets its own cert automatically; you only ever open 443 (and 80 for the
+ACME challenge) in UFW — 8000 stays loopback-only, untouched.
+
+**Your whole team, without exposing anything publicly:**
+Put the VPS on a [Tailscale](https://tailscale.com/) (or similar) network and
+change the binding to `ports: ["8000:8000"]` — reachable only over the private
+mesh network, nothing public-facing at all.
+
+If you ever bind the dashboard's port to `0.0.0.0` directly (skip the loopback
+restriction) without one of the above in front of it, treat that as equivalent to
+having no firewall on port 8000 — Docker will make it reachable regardless of any
+`ufw deny 8000` you add. If you want UFW to actually be authoritative over
+container ports, install [`ufw-docker`](https://github.com/chaifeng/ufw-docker)
+instead of relying on `ufw deny`.
+
+### Approve-endpoint auth is not a substitute for network exposure control
+
+`DASHBOARD_APPROVE_TOKEN` gates the one mutating action (approving/un-approving a
+week) with a shared secret, but the dashboard's *view* is unauthenticated by
+design ("clients only need a browser," per the original ask). Don't rely on the
+token alone if you expose the dashboard publicly — put real auth (the Caddy
+`basicauth` above, or your proxy's equivalent) in front of it too.
 
 ### Outbound firewalling (optional hardening)
 
-UFW's *default* outbound policy is `allow`, which is what the bot needs (Telegram
-/ Notion / AI over 443). If you tighten egress, allow at least DNS (53) and HTTPS
-(443). No inbound rule is required for the bot itself.
+UFW's *default* outbound policy is `allow`, which is what both services need
+(Telegram / Notion / AI over 443). If you tighten egress, allow at least DNS (53)
+and HTTPS (443).

@@ -1,0 +1,8 @@
+# Deps for the web dashboard container ONLY (see Dockerfile.dashboard). Kept
+# separate from requirements.txt (the bot's deps) so neither image carries
+# packages it doesn't use — the dashboard doesn't need `openai`, the bot
+# doesn't need `fastapi`/`uvicorn`.
+requests==2.33.0
+python-dotenv==1.2.2
+fastapi==0.140.9
+uvicorn==0.42.0

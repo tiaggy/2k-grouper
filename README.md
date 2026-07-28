@@ -51,9 +51,35 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-See **[README.docker.md](README.docker.md)** for the container details (why it
-publishes no ports, and the Docker + UFW firewall gotcha) and
-**[DEPLOY.md](DEPLOY.md)** for a full VPS deployment walkthrough.
+This starts **two** containers — the bot, and the web dashboard (below). See
+**[README.docker.md](README.docker.md)** for the container details (why the bot
+publishes no ports but the dashboard does, and the Docker + UFW firewall gotcha)
+and **[DEPLOY.md](DEPLOY.md)** for a full VPS deployment walkthrough.
+
+## Web dashboard
+
+A read-only, auto-updating attendance dashboard — one combined calendar table
+per team (Tracked Group), workers as rows, grouped by week, most recent first.
+Runs as its own container (`dashboard/`, `Dockerfile.dashboard`), polling
+`/api/data` in the browser every 15s; no login needed to view.
+
+Each week has an **Approve / Not approved** toggle. A **not-approved** week is
+always live — recomputed from the Notion Capture Log on a timer
+(`DASHBOARD_REFRESH_SECONDS`, default 60s). Approving a week **freezes** it: the
+dashboard stops re-deriving that (team, week) from Notion and keeps serving
+whatever it last computed, until someone un-approves it again. The Approved flag
+itself lives in Notion (a small **Week Approvals** database — `Group` relation +
+`Week Start` date + `Approved` checkbox); the frozen table data lives in the
+dashboard's own local SQLite cache (`dashboard_cache.db` on its volume).
+
+Approving/un-approving needs `DASHBOARD_APPROVE_TOKEN` (a shared secret, sent as
+an `X-Approve-Token` header — the page prompts for it once and remembers it in
+the browser). Leave that env var unset to make the dashboard pure view-only.
+
+```bash
+py -m pip install -r requirements-dashboard.txt
+py -m uvicorn dashboard.server:app --reload   # http://127.0.0.1:8000
+```
 
 ## Maintenance tools
 
@@ -72,11 +98,14 @@ publishes no ports, and the Docker + UFW firewall gotcha) and
 | `notion.py` | Capture Log reads/writes (new data-source API) |
 | `notionconfig.py` | Bot Config / Tracked Groups (legacy API) |
 | `notionaccounts.py` | Telegram Accounts registry |
+| `notionapprovals.py` | Week Approvals reads/writes (web dashboard) |
 | `notion_http.py` | Shared retry/backoff policy for all Notion HTTP calls |
+| `attendance.py` | Shared day-code/color/week vocabulary (bot + dashboard) |
 | `missing.py` | The missing-worker sweep |
 | `tracking.py` | Offline cache of tracked group ids (Notion is authoritative) |
 | `storage.py` | Local JSONL audit log of every captured event |
 | `config.py` | All environment configuration |
+| `dashboard/` | The web dashboard (FastAPI backend + static frontend) |
 
 ## Security notes
 
@@ -85,5 +114,7 @@ publishes no ports, and the Docker + UFW firewall gotcha) and
 - The bot only acts on Notion-tracked chats and only obeys commands from
   Notion-listed owners (with a single `.env` fallback owner in case Notion is
   unreachable).
-- Container runs as a non-root user; publishes no inbound ports (long-polling
-  is outbound-only).
+- The bot container runs as a non-root user and publishes no inbound ports
+  (long-polling is outbound-only). The dashboard container also runs as a
+  non-root user; it does publish one port, bound to loopback by default — see
+  README.docker.md before exposing it further.

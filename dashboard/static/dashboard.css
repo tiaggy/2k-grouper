@@ -1,0 +1,237 @@
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --border: #e4e2dd;
+  --text-primary: #171715;
+  --text-secondary: #57564f;
+  --text-muted: #8a887f;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --shadow: 0 1px 2px rgba(20, 20, 15, 0.06), 0 1px 6px rgba(20, 20, 15, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface: #17171a;
+    --surface-raised: #1f1f22;
+    --border: #333237;
+    --text-primary: #f4f3ef;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8a8980;
+    --accent: #3987e5;
+    --accent-ink: #0b0b0b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #17171a;
+  --surface-raised: #1f1f22;
+  --border: #333237;
+  --text-primary: #f4f3ef;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8a8980;
+  --accent: #3987e5;
+  --accent-ink: #0b0b0b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: 15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 0 16px 64px;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 20px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 5;
+}
+.page-header h1 { font-size: 19px; margin: 0; }
+.header-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
+
+.status-pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.status-loading { background: var(--border); color: var(--text-secondary); }
+.status-ok { background: #d1e9d1; color: #007600; }
+.status-error { background: #f7dcdc; color: #b73434; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  margin-bottom: 22px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-swatch {
+  width: 18px; height: 18px; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 10px; flex: none;
+}
+
+.team { margin-bottom: 34px; }
+.team-label {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+
+.week {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.week-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+}
+.week-bar:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.week-toggle-icon { color: var(--text-muted); transition: transform 0.15s ease; font-size: 12px; width: 12px; }
+.week.collapsed .week-toggle-icon { transform: rotate(-90deg); }
+.week-title { font-weight: 600; font-size: 13.5px; flex: 1; }
+
+.approve-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.approve-badge.approved { background: #d1e9d1; color: #007600; }
+.approve-badge.not-approved { background: #fef1d6; color: #91670f; }
+
+.week-body { border-top: 1px solid var(--border); padding: 12px 14px 14px; }
+.week.collapsed .week-body { display: none; }
+
+.week-controls { margin-bottom: 10px; }
+.approve-btn {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.approve-btn:hover { border-color: var(--accent); }
+.approve-btn.is-approved { background: #d1e9d1; color: #007600; border-color: #a9d6a9; }
+.approve-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.table-scroll { overflow-x: auto; }
+.week-table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+.week-table th, .week-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+.week-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border);
+}
+.week-table .worker-name {
+  text-align: left;
+  font-weight: 600;
+  padding-right: 16px;
+  position: sticky;
+  left: 0;
+  background: var(--surface-raised);
+}
+.week-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.week-table tbody tr:hover .worker-name { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+
+.day-cell {
+  width: 30px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 11.5px;
+}
+.day-cell.weekend:not(.has-code) { background: color-mix(in srgb, var(--text-muted) 22%, transparent); }
+
+.empty-note { color: var(--text-muted); font-size: 13px; padding: 24px 4px; }
+
+.token-banner {
+  position: fixed;
+  bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 20;
+}
+.token-banner input {
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.token-banner button {
+  font: inherit;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  body { padding: 0 8px 64px; }
+  .week-table th, .week-table td { padding: 4px 5px; }
+  .day-cell { width: 24px; }
+}

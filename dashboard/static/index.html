@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2K Attendance Dashboard</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+<header class="page-header">
+  <h1>2K Attendance Dashboard</h1>
+  <div class="header-meta">
+    <span id="status-pill" class="status-pill status-loading">loading…</span>
+    <span id="generated-at" class="generated-at"></span>
+  </div>
+</header>
+
+<section id="legend" class="legend" aria-label="Status legend"></section>
+
+<main id="teams"></main>
+
+<template id="tmpl-team">
+  <section class="team">
+    <h2 class="team-label"></h2>
+    <div class="weeks"></div>
+  </section>
+</template>
+
+<template id="tmpl-week">
+  <article class="week">
+    <button class="week-bar" type="button">
+      <span class="week-toggle-icon">▾</span>
+      <span class="week-title"></span>
+      <span class="approve-badge"></span>
+    </button>
+    <div class="week-body">
+      <div class="week-controls">
+        <button class="approve-btn" type="button"></button>
+      </div>
+      <div class="table-scroll">
+        <table class="week-table">
+          <thead><tr class="days-row"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+</template>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>

@@ -1,10 +1,13 @@
 # Run:  docker compose up -d --build
-# Logs: docker compose logs -f
+# Logs: docker compose logs -f            (both services)
+#       docker compose logs -f dashboard  (one service)
 #
-# NO `ports:` here on purpose. The bot is long-polling / outbound-only, so it needs
-# no inbound port. That also sidesteps the Docker + UFW gotcha (see README.docker.md):
-# publishing a port would insert DOCKER iptables rules that bypass UFW. Since we
-# publish nothing, there is nothing for UFW to fail to block.
+# The bot publishes NO ports on purpose — it's long-polling / outbound-only.
+# The dashboard is a real web page, so it DOES publish one — bound to
+# 127.0.0.1 only by default. See README.docker.md for why (the Docker + UFW
+# gotcha: a published port bypasses UFW unless you're careful) and how to
+# expose it further (reverse proxy / SSH tunnel / Tailscale) if you want it
+# reachable beyond this host.
 services:
   bot:
     build: .
@@ -26,5 +29,27 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: group2k-dashboard:latest
+    container_name: group2k-dashboard
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=${TZ:-Europe/Kyiv}   # week boundaries are computed in local time
+      - STATE_DIR=/data
+    volumes:
+      - dashboard-state:/data  # the SQLite freeze-cache (dashboard_cache.db)
+    ports:
+      - "127.0.0.1:8000:8000"  # loopback only — see README.docker.md
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   bot-state:
+  dashboard-state:

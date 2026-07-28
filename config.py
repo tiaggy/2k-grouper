@@ -61,6 +61,9 @@ NOTION_TRACKED_DB_ID: str = os.getenv("NOTION_TRACKED_DB_ID", "").strip()
 # Telegram Accounts registry — one row per account seen posting (User ID / Name /
 # Username), with a Person relation to the Applicant Tracker (filled by a human).
 NOTION_ACCOUNTS_DB_ID: str = os.getenv("NOTION_ACCOUNTS_DB_ID", "").strip()
+# Week Approvals — one row per (Group, Week Start) the web dashboard has ever
+# touched; Approved=true freezes that team's week from further updates.
+NOTION_APPROVALS_DB_ID: str = os.getenv("NOTION_APPROVALS_DB_ID", "").strip()
 CONFIG_REFRESH_SECONDS: int = int(os.getenv("CONFIG_REFRESH_SECONDS", "300"))
 # When Notion (or, in AI mode, the AI backend) is unavailable, the bot pauses —
 # it stops consuming Telegram updates so messages are held (not dropped or
@@ -106,6 +109,19 @@ EVENTS_LOG = state_path("events.jsonl")
 # (Docker `restart:`, systemd, NSSM) the bot should just EXIT and let the
 # supervisor restart it — set EXIT_ON_RESTART=1. Standalone, it self-respawns.
 EXIT_ON_RESTART: bool = _bool(os.getenv("EXIT_ON_RESTART"))
+
+# --- Web dashboard (dashboard/server.py — runs in its own container) --------
+# How often the background loop re-derives NOT-approved weeks from the Capture
+# Log. Approved weeks are skipped entirely (frozen in the local cache). Each
+# cycle re-pulls the WHOLE Capture Log (paginated), so this is deliberately
+# gentle rather than near-instant — attendance data doesn't change fast enough
+# to need sub-minute latency, and it keeps steady-state Notion API load low as
+# the log grows over months. Lower it if you want snappier updates.
+DASHBOARD_REFRESH_SECONDS: int = int(os.getenv("DASHBOARD_REFRESH_SECONDS", "60"))
+# Shared secret required (as an X-Approve-Token header) to flip a week's
+# approved state. Viewing the dashboard itself needs no auth. Leave unset to
+# disable the approve endpoint entirely (view-only dashboard).
+DASHBOARD_APPROVE_TOKEN: str = os.getenv("DASHBOARD_APPROVE_TOKEN", "").strip()
 
 
 def require_token() -> str:
