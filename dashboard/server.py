@@ -30,15 +30,23 @@ _state_lock = threading.Lock()
 _state: dict = {"snapshot": None, "error": None}
 
 
-def _week_range(records_for_group: dict) -> list:
-    """Every Monday from the group's earliest record's week through the
-    current week, inclusive."""
-    all_dates = [d for by_day in records_for_group.values() for d in by_day]
-    if not all_dates:
-        return []
-    start = attendance.week_start(min(all_dates))
-    end = attendance.week_start(dt.date.today())
-    weeks, w = [], start
+def _all_years(records: dict) -> list:
+    """Every calendar year with at least one record, anywhere, plus the
+    current year always (so the dropdown never comes up empty)."""
+    years = {dt.date.today().year}
+    for group_records in records.values():
+        for by_day in group_records.values():
+            years.update(d.year for d in by_day)
+    return sorted(years)
+
+
+def _year_weeks(year: int) -> list:
+    """Every Monday-aligned week of `year`, Jan through Dec (the first/last
+    week may spill a few days into the neighboring year — standard calendar-
+    week convention, e.g. Excel/ISO week numbering)."""
+    w = attendance.week_start(dt.date(year, 1, 1))
+    end = dt.date(year, 12, 31)
+    weeks = []
     while w <= end:
         weeks.append(w)
         w += dt.timedelta(days=7)
@@ -66,19 +74,16 @@ def _compute_week_table(group_records: dict, accounts: dict, week: dt.date) -> d
     return {"days": day_isos, "workers": workers}
 
 
-def compute_snapshot() -> dict:
-    groups = notion_data.load_groups()
-    accounts = notion_data.load_accounts()
-    records = notion_data.load_records()
-    approvals = notionapprovals.load()
-
+def _year_snapshot(year: int, today: dt.date, groups: dict, accounts: dict,
+                   records: dict, approvals: dict) -> dict:
+    year_weeks = _year_weeks(year)  # already chronological, Jan -> Dec
     teams = []
     for gpid, ginfo in groups.items():
         group_records = records.get(gpid)
-        if not group_records:
-            continue  # nothing recorded for this team yet
+        if not group_records or not any(d.year == year for by_day in group_records.values() for d in by_day):
+            continue  # this team has no data at all in this particular year
         weeks_out = []
-        for week in _week_range(group_records):
+        for week in year_weeks:
             ws_iso = week.isoformat()
             approved = approvals.get((gpid, ws_iso), False)
             if not approved or not cache.has(gpid, ws_iso):
@@ -86,14 +91,36 @@ def compute_snapshot() -> dict:
                 cache.put(gpid, ws_iso, table)
             else:
                 table = cache.get(gpid, ws_iso)
-            weeks_out.append({"week_start": ws_iso, "approved": approved, "table": table})
-        weeks_out.sort(key=lambda w: w["week_start"], reverse=True)
+            weeks_out.append({
+                "week_start": ws_iso,
+                "week_end": (week + dt.timedelta(days=6)).isoformat(),
+                "approved": approved,
+                "table": table,
+            })
         teams.append({"group_id": gpid, "label": ginfo["label"], "weeks": weeks_out})
     teams.sort(key=lambda t: t["label"].lower())
+    current_week = attendance.week_start(today)
+    return {
+        "year": year,
+        "current_week_start": current_week.isoformat() if year == today.year else None,
+        "teams": teams,
+    }
+
+
+def compute_snapshot() -> dict:
+    groups = notion_data.load_groups()
+    accounts = notion_data.load_accounts()
+    records = notion_data.load_records()
+    approvals = notionapprovals.load()
+
+    today = dt.date.today()
+    available_years = _all_years(records)
+    years = {str(y): _year_snapshot(y, today, groups, accounts, records, approvals) for y in available_years}
 
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "teams": teams,
+        "available_years": available_years,
+        "years": years,
         "legend": attendance.LEGEND,
         "colors": {code: {"fill": fill, "font": font} for code, (fill, font) in attendance.CODE_STYLE.items()},
         "weekend_fill": attendance.WEEKEND_FILL,
@@ -161,11 +188,12 @@ async def api_approve(request: Request, x_approve_token: str = Header(default=""
     except ValueError:
         raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD")
 
+    year_key = str(week_start.year)
     with _state_lock:
         snapshot = _state["snapshot"]
     label = group_id[:8]
     if snapshot:
-        for team in snapshot["teams"]:
+        for team in snapshot["years"].get(year_key, {}).get("teams", []):
             if team["group_id"] == group_id:
                 label = team["label"]
                 break
@@ -179,7 +207,7 @@ async def api_approve(request: Request, x_approve_token: str = Header(default=""
     with _state_lock:
         snapshot = _state["snapshot"]
         if snapshot:
-            for team in snapshot["teams"]:
+            for team in snapshot["years"].get(year_key, {}).get("teams", []):
                 if team["group_id"] != group_id:
                     continue
                 for week in team["weeks"]:

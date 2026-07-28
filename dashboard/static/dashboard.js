@@ -9,15 +9,19 @@
   const legendEl = document.getElementById("legend");
   const statusPill = document.getElementById("status-pill");
   const generatedAtEl = document.getElementById("generated-at");
+  const yearSelect = document.getElementById("year-select");
   const tmplTeam = document.getElementById("tmpl-team");
 
   let legendRendered = false;
+  let selectedYear = null;   // string, e.g. "2026" — set once data first arrives
+  let centeredYear = null;   // which year we've already auto-centered on load
 
-  function fmtWeekShort(weekStartIso) {
-    const d = new Date(weekStartIso + "T00:00:00");
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  function fmtMonth(dateIso) {
+    return new Date(dateIso + "T00:00:00").toLocaleDateString(undefined, { month: "short" });
   }
-
+  function fmtDay(dateIso) {
+    return new Date(dateIso + "T00:00:00").getDate();
+  }
   function isWeekend(dateIso) {
     const dow = new Date(dateIso + "T00:00:00").getDay(); // 0=Sun..6=Sat
     return dow === 0 || dow === 6;
@@ -41,6 +45,28 @@
     }
   }
 
+  function populateYearSelect(years) {
+    const prev = yearSelect.value;
+    yearSelect.innerHTML = "";
+    for (const y of years) {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearSelect.appendChild(opt);
+    }
+    if (selectedYear && years.map(String).includes(selectedYear)) {
+      yearSelect.value = selectedYear;
+    } else if (prev && years.map(String).includes(prev)) {
+      yearSelect.value = prev;
+      selectedYear = prev;
+    } else {
+      // Default to the year containing today, if present, else the last (most recent) option.
+      const todayYear = String(new Date().getFullYear());
+      selectedYear = years.map(String).includes(todayYear) ? todayYear : String(years[years.length - 1]);
+      yearSelect.value = selectedYear;
+    }
+  }
+
   function dayCell(code, dateIso, colors) {
     const td = document.createElement("td");
     td.className = "day-cell" + (isWeekend(dateIso) ? " weekend" : "");
@@ -55,29 +81,27 @@
 
   function buildTeamTable(node, team, colors) {
     const weekHeaderRow = node.querySelector(".week-header-row");
+    const daynumRow = node.querySelector(".daynum-row");
     const dowRow = node.querySelector(".dow-row");
     const tbody = node.querySelector("tbody");
     weekHeaderRow.innerHTML = "";
+    daynumRow.innerHTML = "";
     dowRow.innerHTML = "";
     tbody.innerHTML = "";
 
-    // Corner cells above the sticky worker-name column.
-    const cornerTh = document.createElement("th");
-    cornerTh.className = "corner-cell";
-    cornerTh.rowSpan = 1;
-    weekHeaderRow.appendChild(cornerTh);
-    const cornerTh2 = document.createElement("th");
-    cornerTh2.className = "corner-cell";
-    dowRow.appendChild(cornerTh2);
+    for (const row of [weekHeaderRow, daynumRow, dowRow]) {
+      const corner = document.createElement("th");
+      corner.className = "corner-cell";
+      row.appendChild(corner);
+    }
 
-    // Union of every worker across every week, sorted by name.
-    const workerNames = new Map(); // name -> {username}
+    // team.weeks arrives chronologically ascending (oldest -> newest -> future) already.
+    const workerNames = new Map();
     for (const week of team.weeks) {
       for (const w of week.table.workers) workerNames.set(w.name, w.username);
     }
     const names = [...workerNames.keys()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
-    // Per-week lookup: name -> {date: code}
     const weekLookup = team.weeks.map((week) => {
       const m = new Map();
       for (const w of week.table.workers) m.set(w.name, w.days);
@@ -89,11 +113,12 @@
       th.className = "week-header " + (week.approved ? "approved" : "not-approved");
       th.colSpan = 7;
       th.dataset.weekStart = week.week_start;
-      th.dataset.groupId = team.group_id;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "week-header-btn";
-      btn.innerHTML = `<span class="wk-date">${fmtWeekShort(week.week_start)}</span>` +
+      const startLabel = `${fmtMonth(week.week_start)} ${fmtDay(week.week_start)}`;
+      const endLabel = `${fmtMonth(week.week_end)} ${fmtDay(week.week_end)}`;
+      btn.innerHTML = `<span class="wk-date">${startLabel} – ${endLabel}</span>` +
         `<span class="wk-status">${week.approved ? "✓ Approved" : "Not approved"}</span>`;
       btn.title = week.approved ? "Click to un-approve this week" : "Click to approve this week";
       btn.addEventListener("click", () => submitApproval(team.group_id, week.week_start, !week.approved, btn));
@@ -101,6 +126,11 @@
       weekHeaderRow.appendChild(th);
 
       week.table.days.forEach((iso, i) => {
+        const numTh = document.createElement("th");
+        numTh.className = "daynum-cell" + (i === 0 ? " week-start-border" : "");
+        numTh.textContent = fmtDay(iso);
+        daynumRow.appendChild(numTh);
+
         const dth = document.createElement("th");
         dth.className = "dow-cell" + (i === 0 ? " week-start-border" : "");
         dth.textContent = DOW[i];
@@ -113,7 +143,7 @@
       const td = document.createElement("td");
       td.className = "empty-note";
       td.colSpan = 1 + team.weeks.length * 7;
-      td.textContent = "No records yet.";
+      td.textContent = "No records this year.";
       tr.appendChild(td);
       tbody.appendChild(tr);
       return;
@@ -137,37 +167,55 @@
     }
   }
 
+  function centerOnCurrentWeek(node, currentWeekStart) {
+    if (!currentWeekStart) return;
+    const th = node.querySelector(`.week-header[data-week-start="${currentWeekStart}"]`);
+    const scroller = node.querySelector(".table-scroll");
+    if (!th || !scroller) return;
+    const target = th.offsetLeft - scroller.clientWidth / 2 + th.offsetWidth / 2;
+    scroller.scrollLeft = Math.max(0, target);
+  }
+
   function render(data) {
     renderLegend(data.legend, data.colors);
+    populateYearSelect(data.available_years);
+    const yearData = data.years[selectedYear];
+    if (!yearData) return;
 
-    // Preserve each team's horizontal scroll position across re-renders —
-    // these tables can get very wide (a whole tracked history), and losing
-    // scroll position on every ~15s poll would be jarring.
     const scrollByTeam = new Map();
     for (const el of teamsEl.querySelectorAll(".team")) {
       scrollByTeam.set(el.dataset.groupId, el.querySelector(".table-scroll").scrollLeft);
     }
+    const shouldCenter = centeredYear !== selectedYear;
 
     teamsEl.innerHTML = "";
-    if (data.teams.length === 0) {
-      teamsEl.innerHTML = '<p class="empty-note">No teams with attendance data yet.</p>';
+    if (yearData.teams.length === 0) {
+      teamsEl.innerHTML = '<p class="empty-note">No teams with attendance data in ' + selectedYear + '.</p>';
+      centeredYear = selectedYear;
       return;
     }
-    for (const team of data.teams) {
+    for (const team of yearData.teams) {
       const node = tmplTeam.content.firstElementChild.cloneNode(true);
       node.dataset.groupId = team.group_id;
       node.querySelector(".team-label").textContent = team.label;
       buildTeamTable(node, team, data.colors);
       teamsEl.appendChild(node);
-      const prevScroll = scrollByTeam.get(team.group_id);
-      if (prevScroll) node.querySelector(".table-scroll").scrollLeft = prevScroll;
+      if (shouldCenter) {
+        centerOnCurrentWeek(node, yearData.current_week_start);
+      } else {
+        const prevScroll = scrollByTeam.get(team.group_id);
+        if (prevScroll) node.querySelector(".table-scroll").scrollLeft = prevScroll;
+      }
     }
+    centeredYear = selectedYear;
   }
 
   function setStatus(kind, text) {
     statusPill.className = "status-pill status-" + kind;
     statusPill.textContent = text;
   }
+
+  let lastData = null;
 
   async function fetchData() {
     try {
@@ -177,6 +225,7 @@
         setStatus("error", data.error || "error");
         return;
       }
+      lastData = data;
       render(data);
       setStatus(data.stale_error ? "error" : "ok", data.stale_error ? "last refresh failed — showing cached data" : "live");
       generatedAtEl.textContent = "updated " + new Date(data.generated_at).toLocaleTimeString();
@@ -184,6 +233,11 @@
       setStatus("error", "unreachable");
     }
   }
+
+  yearSelect.addEventListener("change", () => {
+    selectedYear = yearSelect.value;
+    if (lastData) render(lastData);   // instant — already have every year's data
+  });
 
   function showTokenBanner(retryFn) {
     let banner = document.querySelector(".token-banner");

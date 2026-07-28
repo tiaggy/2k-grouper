@@ -50,19 +50,30 @@ body {
 .page-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 20px 0 12px;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  margin-bottom: 22px;
   position: sticky;
   top: 0;
   background: var(--surface);
   z-index: 5;
 }
-.page-header h1 { font-size: 19px; margin: 0; }
-.header-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
+.header-title-group { display: flex; align-items: center; gap: 10px; flex: none; }
+.page-header h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+.year-select {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.header-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); flex: none; white-space: nowrap; }
 
 .status-pill {
   padding: 3px 9px;
@@ -78,21 +89,16 @@ body {
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 10px 14px;
-  margin-bottom: 22px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  font-size: 12px;
+  gap: 5px 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
+  flex: 1 1 240px;
 }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .legend-swatch {
-  width: 18px; height: 18px; border-radius: 5px;
+  width: 17px; height: 17px; border-radius: 5px;
   display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 10px; flex: none;
+  font-weight: 700; font-size: 9.5px; flex: none;
 }
 
 .team { margin-bottom: 40px; }
@@ -150,12 +156,19 @@ body {
 .wk-date { font-weight: 700; font-size: 11.5px; }
 .wk-status { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.8; }
 
+.daynum-cell {
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 11px;
+  padding-bottom: 2px;
+}
 .dow-cell {
   color: var(--text-muted);
   font-weight: 600;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  padding-top: 2px;
 }
 
 .week-start-border { border-left: 2px solid var(--border); }

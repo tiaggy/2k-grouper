@@ -8,25 +8,28 @@
 </head>
 <body>
 <header class="page-header">
-  <h1>2K Attendance Dashboard</h1>
+  <div class="header-title-group">
+    <h1>2K Attendance Dashboard</h1>
+    <select id="year-select" class="year-select" aria-label="Year"></select>
+  </div>
+  <section id="legend" class="legend" aria-label="Status legend"></section>
   <div class="header-meta">
     <span id="status-pill" class="status-pill status-loading">loading…</span>
     <span id="generated-at" class="generated-at"></span>
   </div>
 </header>
 
-<section id="legend" class="legend" aria-label="Status legend"></section>
-
 <main id="teams"></main>
 
 <template id="tmpl-team">
   <section class="team">
     <h2 class="team-label"></h2>
-    <p class="team-hint">Scroll right for older weeks. Click a week's header to approve/un-approve it.</p>
+    <p class="team-hint">Scroll right for later weeks. Click a week's header to approve/un-approve it.</p>
     <div class="table-scroll">
       <table class="team-table">
         <thead>
           <tr class="week-header-row"></tr>
+          <tr class="daynum-row"></tr>
           <tr class="dow-row"></tr>
         </thead>
         <tbody></tbody>

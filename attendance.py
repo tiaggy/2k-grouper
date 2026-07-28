@@ -31,20 +31,21 @@ LEGEND = [
     ("X", "Missing — expected, no record"),
 ]
 
-# Per-code (fill, font) hex pairs — a light tint of a base hue behind a
-# darkened, bold version of the same hue, each pair WCAG-AA contrast checked
-# (>=4.5:1). Same values used by export_calendars.py's Excel badges, so the
-# web dashboard and the Excel exports read as one visual system. Plain 6-hex
-# is fine here (CSS, not Excel ARGB — openpyxl's alpha-prefix gotcha doesn't
-# apply to a web page).
+# Per-code (fill, font) hex pairs — sampled directly from this project's own
+# Notion "Intent" select property (dark-mode tag pill colors), so the
+# dashboard's badges read as the same colors already used in Notion itself:
+# solid, muted fill + white text (Notion's own dark-theme tag style), not a
+# light-tint-behind-dark-text badge like an earlier iteration used. P (this
+# tool's collapsed clock_in+clock_out) uses Notion's clock_in green. All 7
+# pairs clear white-text contrast >=5:1.
 CODE_STYLE = {
-    "P": ("#D1E9D1", "#007600"),
-    "V": ("#D9E7F8", "#2467B8"),
-    "S": ("#FBE7EF", "#9B526E"),
-    "H": ("#DEDCEF", "#4A3AA7"),
-    "O": ("#D6F1E7", "#137954"),
-    "U": ("#FEF1D6", "#91670F"),
-    "X": ("#F7DCDC", "#B73434"),
+    "P": ("#3F6F54", "#FFFFFF"),  # clock_in green
+    "V": ("#8E5835", "#FFFFFF"),  # vacation
+    "S": ("#3B6591", "#FFFFFF"),  # sick
+    "H": ("#896A2C", "#FFFFFF"),  # public_holiday
+    "O": ("#6E5482", "#FFFFFF"),  # day_off
+    "U": ("#824E67", "#FFFFFF"),  # unresolved
+    "X": ("#755B48", "#FFFFFF"),  # missing
 }
 WEEKEND_FILL = "#F2F2F2"
 
