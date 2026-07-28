@@ -96,11 +96,23 @@
     }
 
     // team.weeks arrives chronologically ascending (oldest -> newest -> future) already.
-    const workerNames = new Map();
+    // Row order: earliest first-recorded day (within this year) first, then
+    // alphabetically among workers who started the same day.
+    const firstDate = new Map(); // name -> earliest date ISO seen this year
     for (const week of team.weeks) {
-      for (const w of week.table.workers) workerNames.set(w.name, w.username);
+      for (const w of week.table.workers) {
+        const days = Object.keys(w.days);
+        if (days.length === 0) continue;
+        const earliest = days.reduce((a, b) => (a < b ? a : b));
+        const prev = firstDate.get(w.name);
+        if (!prev || earliest < prev) firstDate.set(w.name, earliest);
+      }
     }
-    const names = [...workerNames.keys()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const names = [...firstDate.keys()].sort((a, b) => {
+      const da = firstDate.get(a), db = firstDate.get(b);
+      if (da !== db) return da < db ? -1 : 1;
+      return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
 
     const weekLookup = team.weeks.map((week) => {
       const m = new Map();
