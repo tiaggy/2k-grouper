@@ -52,6 +52,44 @@ def load() -> dict | None:
         return None
 
 
+def all_accounts() -> list[dict]:
+    """Every account row in full: [{'page_id', 'user_id', 'name', 'username',
+    'person_id'}, ...]. `person_id` is None if the Person relation is unset.
+    Empty list on failure or if unconfigured."""
+    if not (config.NOTION_TOKEN and config.NOTION_ACCOUNTS_DB_ID):
+        return []
+    out: list[dict] = []
+    cursor = None
+    try:
+        while True:
+            body = {"page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = _send("POST", f"https://api.notion.com/v1/databases/{config.NOTION_ACCOUNTS_DB_ID}/query", json=body)
+            r.raise_for_status()
+            d = r.json()
+            for pg in d.get("results", []):
+                p = pg.get("properties", {})
+                idv = (p.get("User ID", {}) or {}).get("number")
+                name = "".join(t.get("plain_text", "") for t in (p.get("Name", {}).get("title") or []))
+                username = "".join(t.get("plain_text", "") for t in (p.get("Username", {}).get("rich_text") or []))
+                person_rel = (p.get("Person", {}) or {}).get("relation") or []
+                out.append({
+                    "page_id": pg["id"],
+                    "user_id": int(idv) if idv is not None else None,
+                    "name": name or None,
+                    "username": username or None,
+                    "person_id": person_rel[0]["id"] if person_rel else None,
+                })
+            if not d.get("has_more"):
+                break
+            cursor = d.get("next_cursor")
+        return out
+    except Exception as exc:
+        print(f"[accounts] all_accounts failed: {exc!r}")
+        return []
+
+
 def _find(user_id: int) -> str | None:
     """Page id of the row with this User ID, if it exists."""
     try:
