@@ -95,104 +95,87 @@ body {
   font-weight: 700; font-size: 10px; flex: none;
 }
 
-.team { margin-bottom: 34px; }
+.team { margin-bottom: 40px; }
 .team-label {
   font-size: 15px;
   font-weight: 700;
-  margin: 0 0 10px;
+  margin: 0 0 4px;
   padding-bottom: 6px;
   border-bottom: 2px solid var(--accent);
   display: inline-block;
 }
+.team-hint { margin: 6px 0 10px; font-size: 12px; color: var(--text-muted); }
 
-.week {
-  background: var(--surface-raised);
+.table-scroll {
+  overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
-  margin-bottom: 10px;
-  overflow: hidden;
+  background: var(--surface-raised);
 }
 
-.week-bar {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text-primary);
-  text-align: left;
-}
-.week-bar:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.week-toggle-icon { color: var(--text-muted); transition: transform 0.15s ease; font-size: 12px; width: 12px; }
-.week.collapsed .week-toggle-icon { transform: rotate(-90deg); }
-.week-title { font-weight: 600; font-size: 13.5px; flex: 1; }
-
-.approve-badge {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  letter-spacing: 0.02em;
-}
-.approve-badge.approved { background: #d1e9d1; color: #007600; }
-.approve-badge.not-approved { background: #fef1d6; color: #91670f; }
-
-.week-body { border-top: 1px solid var(--border); padding: 12px 14px 14px; }
-.week.collapsed .week-body { display: none; }
-
-.week-controls { margin-bottom: 10px; }
-.approve-btn {
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-.approve-btn:hover { border-color: var(--accent); }
-.approve-btn.is-approved { background: #d1e9d1; color: #007600; border-color: #a9d6a9; }
-.approve-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-
-.table-scroll { overflow-x: auto; }
-.week-table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
-.week-table th, .week-table td {
-  padding: 5px 8px;
+.team-table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.team-table th, .team-table td {
+  padding: 5px 7px;
   border-bottom: 1px solid var(--border);
   text-align: center;
   white-space: nowrap;
 }
-.week-table thead th {
+
+.corner-cell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--surface-raised);
+  min-width: 140px;
+}
+
+.week-header { padding: 0; border-bottom: 1px solid var(--border); }
+.week-header-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 6px;
+  font: inherit;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
+.week-header-btn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.week-header.approved .week-header-btn { background: #d1e9d1; color: #007600; }
+.week-header.approved .week-header-btn:hover { background: #bfe3bf; }
+.wk-date { font-weight: 700; font-size: 11.5px; }
+.wk-status { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.8; }
+
+.dow-cell {
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.02em;
 }
-.week-table .worker-name {
+
+.week-start-border { border-left: 2px solid var(--border); }
+
+.team-table .worker-name {
   text-align: left;
   font-weight: 600;
   padding-right: 16px;
   position: sticky;
   left: 0;
+  z-index: 2;
   background: var(--surface-raised);
 }
-.week-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
-.week-table tbody tr:hover .worker-name { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+.team-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.team-table tbody tr:hover .worker-name { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
 
 .day-cell {
-  width: 30px;
-  border-radius: 5px;
+  width: 28px;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 11px;
 }
 .day-cell.weekend:not(.has-code) { background: color-mix(in srgb, var(--text-muted) 22%, transparent); }
 
@@ -232,6 +215,7 @@ body {
 
 @media (max-width: 560px) {
   body { padding: 0 8px 64px; }
-  .week-table th, .week-table td { padding: 4px 5px; }
-  .day-cell { width: 24px; }
+  .team-table th, .team-table td { padding: 4px 5px; }
+  .day-cell { width: 22px; }
+  .corner-cell { min-width: 100px; }
 }

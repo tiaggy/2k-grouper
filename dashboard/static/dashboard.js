@@ -10,16 +10,12 @@
   const statusPill = document.getElementById("status-pill");
   const generatedAtEl = document.getElementById("generated-at");
   const tmplTeam = document.getElementById("tmpl-team");
-  const tmplWeek = document.getElementById("tmpl-week");
 
-  // key = `${group_id}|${week_start}` -> {approved, expanded}
-  const weekUi = new Map();
   let legendRendered = false;
-  let pendingApprovePayload = null;
 
-  function fmtWeek(weekStartIso) {
+  function fmtWeekShort(weekStartIso) {
     const d = new Date(weekStartIso + "T00:00:00");
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
   function isWeekend(dateIso) {
@@ -45,117 +41,126 @@
     }
   }
 
-  function weekKey(groupId, weekStart) {
-    return `${groupId}|${weekStart}`;
-  }
-
-  function uiFor(groupId, week) {
-    const key = weekKey(groupId, week.week_start);
-    let ui = weekUi.get(key);
-    if (!ui || ui.approved !== week.approved) {
-      ui = { approved: week.approved, expanded: !week.approved };
-      weekUi.set(key, ui);
+  function dayCell(code, dateIso, colors) {
+    const td = document.createElement("td");
+    td.className = "day-cell" + (isWeekend(dateIso) ? " weekend" : "");
+    if (code) {
+      td.classList.add("has-code");
+      td.textContent = code;
+      const c = colors[code];
+      if (c) { td.style.background = c.fill; td.style.color = c.font; }
     }
-    return ui;
+    return td;
   }
 
-  function buildWeekTable(table, colors, weekendFill) {
-    const scroll = document.createElement("div");
-    scroll.className = "table-scroll";
-    const tableEl = document.createElement("table");
-    tableEl.className = "week-table";
+  function buildTeamTable(node, team, colors) {
+    const weekHeaderRow = node.querySelector(".week-header-row");
+    const dowRow = node.querySelector(".dow-row");
+    const tbody = node.querySelector("tbody");
+    weekHeaderRow.innerHTML = "";
+    dowRow.innerHTML = "";
+    tbody.innerHTML = "";
 
-    const thead = document.createElement("thead");
-    const headRow = document.createElement("tr");
-    headRow.appendChild(document.createElement("th"));
-    table.days.forEach((iso, i) => {
-      const th = document.createElement("th");
-      th.textContent = DOW[i];
-      headRow.appendChild(th);
+    // Corner cells above the sticky worker-name column.
+    const cornerTh = document.createElement("th");
+    cornerTh.className = "corner-cell";
+    cornerTh.rowSpan = 1;
+    weekHeaderRow.appendChild(cornerTh);
+    const cornerTh2 = document.createElement("th");
+    cornerTh2.className = "corner-cell";
+    dowRow.appendChild(cornerTh2);
+
+    // Union of every worker across every week, sorted by name.
+    const workerNames = new Map(); // name -> {username}
+    for (const week of team.weeks) {
+      for (const w of week.table.workers) workerNames.set(w.name, w.username);
+    }
+    const names = [...workerNames.keys()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+    // Per-week lookup: name -> {date: code}
+    const weekLookup = team.weeks.map((week) => {
+      const m = new Map();
+      for (const w of week.table.workers) m.set(w.name, w.days);
+      return { week, m };
     });
-    thead.appendChild(headRow);
-    tableEl.appendChild(thead);
 
-    const tbody = document.createElement("tbody");
-    if (table.workers.length === 0) {
+    for (const { week } of weekLookup) {
+      const th = document.createElement("th");
+      th.className = "week-header " + (week.approved ? "approved" : "not-approved");
+      th.colSpan = 7;
+      th.dataset.weekStart = week.week_start;
+      th.dataset.groupId = team.group_id;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "week-header-btn";
+      btn.innerHTML = `<span class="wk-date">${fmtWeekShort(week.week_start)}</span>` +
+        `<span class="wk-status">${week.approved ? "✓ Approved" : "Not approved"}</span>`;
+      btn.title = week.approved ? "Click to un-approve this week" : "Click to approve this week";
+      btn.addEventListener("click", () => submitApproval(team.group_id, week.week_start, !week.approved, btn));
+      th.appendChild(btn);
+      weekHeaderRow.appendChild(th);
+
+      week.table.days.forEach((iso, i) => {
+        const dth = document.createElement("th");
+        dth.className = "dow-cell" + (i === 0 ? " week-start-border" : "");
+        dth.textContent = DOW[i];
+        dowRow.appendChild(dth);
+      });
+    }
+
+    if (names.length === 0) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.colSpan = table.days.length + 1;
       td.className = "empty-note";
-      td.textContent = "No records this week.";
+      td.colSpan = 1 + team.weeks.length * 7;
+      td.textContent = "No records yet.";
       tr.appendChild(td);
       tbody.appendChild(tr);
+      return;
     }
-    for (const worker of table.workers) {
+
+    for (const name of names) {
       const tr = document.createElement("tr");
       const nameTd = document.createElement("td");
       nameTd.className = "worker-name";
-      nameTd.textContent = worker.name;
+      nameTd.textContent = name;
       tr.appendChild(nameTd);
-      for (const iso of table.days) {
-        const td = document.createElement("td");
-        const code = worker.days[iso];
-        td.className = "day-cell" + (isWeekend(iso) ? " weekend" : "");
-        if (code) {
-          td.classList.add("has-code");
-          td.textContent = code;
-          const c = colors[code];
-          if (c) { td.style.background = c.fill; td.style.color = c.font; }
-        }
-        tr.appendChild(td);
+      for (const { week, m } of weekLookup) {
+        const days = m.get(name);
+        week.table.days.forEach((iso, i) => {
+          const td = dayCell(days ? days[iso] : null, iso, colors);
+          if (i === 0) td.classList.add("week-start-border");
+          tr.appendChild(td);
+        });
       }
       tbody.appendChild(tr);
     }
-    tableEl.appendChild(tbody);
-    scroll.appendChild(tableEl);
-    return scroll;
-  }
-
-  function renderWeek(groupId, groupLabel, week, colors, weekendFill) {
-    const node = tmplWeek.content.firstElementChild.cloneNode(true);
-    const ui = uiFor(groupId, week);
-    node.classList.toggle("collapsed", !ui.expanded);
-    node.dataset.groupId = groupId;
-    node.dataset.weekStart = week.week_start;
-
-    node.querySelector(".week-title").textContent = `Week of ${fmtWeek(week.week_start)}`;
-    const badge = node.querySelector(".approve-badge");
-    badge.textContent = week.approved ? "Approved" : "Not approved";
-    badge.className = "approve-badge " + (week.approved ? "approved" : "not-approved");
-
-    const approveBtn = node.querySelector(".approve-btn");
-    approveBtn.textContent = week.approved ? "Un-approve" : "Approve";
-    approveBtn.classList.toggle("is-approved", week.approved);
-
-    node.querySelector(".week-bar").addEventListener("click", () => {
-      ui.expanded = !ui.expanded;
-      node.classList.toggle("collapsed", !ui.expanded);
-    });
-
-    approveBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      submitApproval(groupId, groupLabel, week.week_start, !week.approved, approveBtn);
-    });
-
-    node.querySelector(".week-body").appendChild(buildWeekTable(week.table, colors, weekendFill));
-    return node;
   }
 
   function render(data) {
     renderLegend(data.legend, data.colors);
+
+    // Preserve each team's horizontal scroll position across re-renders —
+    // these tables can get very wide (a whole tracked history), and losing
+    // scroll position on every ~15s poll would be jarring.
+    const scrollByTeam = new Map();
+    for (const el of teamsEl.querySelectorAll(".team")) {
+      scrollByTeam.set(el.dataset.groupId, el.querySelector(".table-scroll").scrollLeft);
+    }
+
     teamsEl.innerHTML = "";
     if (data.teams.length === 0) {
       teamsEl.innerHTML = '<p class="empty-note">No teams with attendance data yet.</p>';
       return;
     }
     for (const team of data.teams) {
-      const teamNode = tmplTeam.content.firstElementChild.cloneNode(true);
-      teamNode.querySelector(".team-label").textContent = team.label;
-      const weeksEl = teamNode.querySelector(".weeks");
-      for (const week of team.weeks) {
-        weeksEl.appendChild(renderWeek(team.group_id, team.label, week, data.colors, data.weekend_fill));
-      }
-      teamsEl.appendChild(teamNode);
+      const node = tmplTeam.content.firstElementChild.cloneNode(true);
+      node.dataset.groupId = team.group_id;
+      node.querySelector(".team-label").textContent = team.label;
+      buildTeamTable(node, team, data.colors);
+      teamsEl.appendChild(node);
+      const prevScroll = scrollByTeam.get(team.group_id);
+      if (prevScroll) node.querySelector(".table-scroll").scrollLeft = prevScroll;
     }
   }
 
@@ -205,7 +210,7 @@
     input.focus();
   }
 
-  async function submitApproval(groupId, groupLabel, weekStart, approved, btnEl) {
+  async function submitApproval(groupId, weekStart, approved, btnEl) {
     btnEl.disabled = true;
     try {
       const token = localStorage.getItem(TOKEN_KEY) || "";
@@ -215,7 +220,7 @@
         body: JSON.stringify({ group_id: groupId, week_start: weekStart, approved }),
       });
       if (res.status === 401) {
-        showTokenBanner(() => submitApproval(groupId, groupLabel, weekStart, approved, btnEl));
+        showTokenBanner(() => submitApproval(groupId, weekStart, approved, btnEl));
         return;
       }
       if (res.status === 403) {
@@ -227,7 +232,6 @@
         alert("Failed: " + (d.detail || res.status));
         return;
       }
-      weekUi.set(weekKey(groupId, weekStart), { approved, expanded: !approved });
       await fetchData();
     } finally {
       btnEl.disabled = false;

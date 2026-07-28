@@ -22,29 +22,17 @@
 <template id="tmpl-team">
   <section class="team">
     <h2 class="team-label"></h2>
-    <div class="weeks"></div>
-  </section>
-</template>
-
-<template id="tmpl-week">
-  <article class="week">
-    <button class="week-bar" type="button">
-      <span class="week-toggle-icon">▾</span>
-      <span class="week-title"></span>
-      <span class="approve-badge"></span>
-    </button>
-    <div class="week-body">
-      <div class="week-controls">
-        <button class="approve-btn" type="button"></button>
-      </div>
-      <div class="table-scroll">
-        <table class="week-table">
-          <thead><tr class="days-row"></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+    <p class="team-hint">Scroll right for older weeks. Click a week's header to approve/un-approve it.</p>
+    <div class="table-scroll">
+      <table class="team-table">
+        <thead>
+          <tr class="week-header-row"></tr>
+          <tr class="dow-row"></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
-  </article>
+  </section>
 </template>
 
 <script src="/static/dashboard.js"></script>
