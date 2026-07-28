@@ -76,12 +76,18 @@ def _compute_week_table(group_records: dict, accounts: dict, week: dt.date) -> d
 
 def _year_snapshot(year: int, today: dt.date, groups: dict, accounts: dict,
                    records: dict, approvals: dict) -> dict:
-    year_weeks = _year_weeks(year)  # already chronological, Jan -> Dec
+    full_year_weeks = _year_weeks(year)  # already chronological, Jan -> Dec
     teams = []
     for gpid, ginfo in groups.items():
         group_records = records.get(gpid)
-        if not group_records or not any(d.year == year for by_day in group_records.values() for d in by_day):
+        year_dates = [d for by_day in group_records.values() for d in by_day if d.year == year] if group_records else []
+        if not year_dates:
             continue  # this team has no data at all in this particular year
+        # Trim leading weeks before this team's own first record that year —
+        # don't show a run of empty weeks just because some OTHER team (or a
+        # later year in general) started earlier.
+        team_start_week = attendance.week_start(min(year_dates))
+        year_weeks = [w for w in full_year_weeks if w >= team_start_week]
         weeks_out = []
         for week in year_weeks:
             ws_iso = week.isoformat()
