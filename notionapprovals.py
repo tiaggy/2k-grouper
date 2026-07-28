@@ -83,6 +83,37 @@ def _find(group_page_id: str, week_start_iso: str) -> str | None:
         return None
 
 
+def is_approved(group_page_id: str, week_start_iso: str) -> bool:
+    """Authoritative, synchronous check of one (group, week) row's Approved
+    flag straight from Notion. Used to guard the dashboard's edit-cell write
+    path, where the in-memory snapshot isn't safe to trust: a concurrent
+    background refresh can silently replace it with a fresh-but-stale read
+    (computed from Notion state as of before a just-written approval landed),
+    defeating an approved-week check that only looks at that snapshot. Small,
+    fast query against this tiny control-plane DB — not the slow Capture Log
+    pull. Fails closed on a Notion/network error (query attempted but didn't
+    complete): reports approved=True so the caller blocks the edit rather
+    than risking a write it couldn't actually confirm was safe. Unconfigured
+    (no approvals DB set up at all) is a different, permanent case where
+    nothing can ever be approved — same as load()'s convention — so that
+    still reports False."""
+    if not (config.NOTION_TOKEN and config.NOTION_APPROVALS_DB_ID):
+        return False
+    try:
+        r = _send("POST", f"https://api.notion.com/v1/databases/{config.NOTION_APPROVALS_DB_ID}/query",
+                  json={"filter": {"and": [
+                      {"property": "Group", "relation": {"contains": group_page_id}},
+                      {"property": "Week Start", "date": {"equals": week_start_iso}},
+                  ]}, "page_size": 1})
+        r.raise_for_status()
+        res = r.json().get("results")
+        if not res:
+            return False
+        return bool((res[0].get("properties", {}).get("Approved", {}) or {}).get("checkbox"))
+    except Exception:
+        return True
+
+
 def set_approved(group_page_id: str, week_start: dt.date, approved: bool, label: str) -> bool:
     """Create-or-update the (group, week) row's Approved flag. `label` is the
     human-readable title (e.g. 'iSoftBet — Week of 2026-07-20')."""

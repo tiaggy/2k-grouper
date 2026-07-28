@@ -19,6 +19,11 @@ INTENT_CODE = {
     "vacation": "V", "sick": "S", "public_holiday": "H",
     "day_off": "O", "unresolved": "U", "missing": "X",
 }
+# The reverse mapping, for the dashboard's manual edit-cell feature: a code
+# picked from the choice list needs one concrete intent to write back to
+# Notion. P (collapsed clock_in+clock_out) writes as a lone clock_in, which
+# day_code() already renders as 'P' on its own.
+CODE_INTENT = {"P": "clock_in", **{code: intent for intent, code in INTENT_CODE.items()}}
 
 # Display order + legend label for each code.
 LEGEND = [

@@ -82,6 +82,28 @@ def archive_missing(account_page_id: str | None, date_str: str | None) -> int:
     return n
 
 
+def archive_day(account_page_id: str | None, date_str: str | None) -> int:
+    """Archive every Capture Log row for this account on this day, regardless
+    of intent. Used by the dashboard's manual edit-cell feature: a correction
+    replaces whatever was already recorded that day outright, rather than
+    reconciling with it. Returns how many rows were archived. Best-effort."""
+    if not (config.NOTION_ENABLED and account_page_id and date_str):
+        return 0
+    flt = {"and": [
+        {"property": "Account", "relation": {"contains": account_page_id}},
+        {"property": "Date", "date": {"equals": date_str[:10]}},
+    ]}
+    n = 0
+    try:
+        for pg in query_capture(flt):
+            r = _send("PATCH", f"https://api.notion.com/v1/pages/{pg['id']}", json={"archived": True})
+            if r.status_code == 200:
+                n += 1
+    except Exception:
+        pass
+    return n
+
+
 def enforce_day_unresolved(account_page_id: str | None, date_str: str | None) -> int:
     """A worker+day is 'clean' only as a lone record or a single clock_in+clock_out
     pair. Any other multi-record day is ambiguous -> set every record that day to

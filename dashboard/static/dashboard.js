@@ -67,7 +67,7 @@
     }
   }
 
-  function dayCell(code, dateIso, colors) {
+  function dayCell(code, dateIso, colors, editCtx, legend) {
     const td = document.createElement("td");
     td.className = "day-cell" + (isWeekend(dateIso) ? " weekend" : "");
     if (code) {
@@ -76,10 +76,18 @@
       const c = colors[code];
       if (c) { td.style.background = c.fill; td.style.color = c.font; }
     }
+    if (editCtx) {
+      td.classList.add("editable");
+      td.title = "Click to set this day's status";
+      td.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditPicker(td, { groupId: editCtx.groupId, accountId: editCtx.accountId, dateIso, code }, legend, colors);
+      });
+    }
     return td;
   }
 
-  function buildTeamTable(node, team, colors) {
+  function buildTeamTable(node, team, colors, legend) {
     const weekHeaderRow = node.querySelector(".week-header-row");
     const daynumRow = node.querySelector(".daynum-row");
     const dowRow = node.querySelector(".dow-row");
@@ -99,6 +107,7 @@
     // Row order: earliest first-recorded day (within this year) first, then
     // alphabetically among workers who started the same day.
     const firstDate = new Map(); // name -> earliest date ISO seen this year
+    const accountIdByName = new Map();
     for (const week of team.weeks) {
       for (const w of week.table.workers) {
         const days = Object.keys(w.days);
@@ -106,6 +115,7 @@
         const earliest = days.reduce((a, b) => (a < b ? a : b));
         const prev = firstDate.get(w.name);
         if (!prev || earliest < prev) firstDate.set(w.name, earliest);
+        if (!accountIdByName.has(w.name)) accountIdByName.set(w.name, w.account_id);
       }
     }
     const names = [...firstDate.keys()].sort((a, b) => {
@@ -167,10 +177,12 @@
       nameTd.className = "worker-name";
       nameTd.textContent = name;
       tr.appendChild(nameTd);
+      const accountId = accountIdByName.get(name);
       for (const { week, m } of weekLookup) {
         const days = m.get(name);
+        const editCtx = week.approved ? null : { groupId: team.group_id, accountId };
         week.table.days.forEach((iso, i) => {
-          const td = dayCell(days ? days[iso] : null, iso, colors);
+          const td = dayCell(days ? days[iso] : null, iso, colors, editCtx, legend);
           if (i === 0) td.classList.add("week-start-border");
           tr.appendChild(td);
         });
@@ -189,6 +201,7 @@
   }
 
   function render(data) {
+    closePicker(); // the table gets rebuilt below; don't leave a picker pointing at a stale cell
     renderLegend(data.legend, data.colors);
     populateYearSelect(data.available_years);
     const yearData = data.years[selectedYear];
@@ -210,7 +223,7 @@
       const node = tmplTeam.content.firstElementChild.cloneNode(true);
       node.dataset.groupId = team.group_id;
       node.querySelector(".team-label").textContent = team.label;
-      buildTeamTable(node, team, data.colors);
+      buildTeamTable(node, team, data.colors, data.legend);
       teamsEl.appendChild(node);
       if (shouldCenter) {
         centerOnCurrentWeek(node, yearData.current_week_start);
@@ -301,6 +314,92 @@
       await fetchData();
     } finally {
       btnEl.disabled = false;
+    }
+  }
+
+  let openPicker = null;
+
+  function closePicker() {
+    if (openPicker) { openPicker.remove(); openPicker = null; }
+    document.removeEventListener("click", onDocClickClosePicker, true);
+    document.removeEventListener("keydown", onDocKeyClosePicker, true);
+  }
+  function onDocClickClosePicker(e) {
+    if (openPicker && !openPicker.contains(e.target)) closePicker();
+  }
+  function onDocKeyClosePicker(e) {
+    if (e.key === "Escape") closePicker();
+  }
+
+  function openEditPicker(cellEl, ctx, legend, colors) {
+    closePicker();
+    const picker = document.createElement("div");
+    picker.className = "edit-picker";
+    for (const [code, label] of legend) {
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = "edit-picker-opt" + (code === ctx.code ? " current" : "");
+      const sw = document.createElement("span");
+      sw.className = "edit-picker-swatch";
+      sw.textContent = code;
+      sw.style.background = colors[code].fill;
+      sw.style.color = colors[code].font;
+      opt.appendChild(sw);
+      opt.appendChild(document.createTextNode(label));
+      opt.addEventListener("click", () => { closePicker(); submitEdit(ctx, code); });
+      picker.appendChild(opt);
+    }
+    const clearOpt = document.createElement("button");
+    clearOpt.type = "button";
+    clearOpt.className = "edit-picker-opt edit-picker-clear";
+    clearOpt.textContent = "— No record (clear) —";
+    clearOpt.addEventListener("click", () => { closePicker(); submitEdit(ctx, ""); });
+    picker.appendChild(clearOpt);
+
+    document.body.appendChild(picker);
+    const r = cellEl.getBoundingClientRect();
+    const pr = picker.getBoundingClientRect();
+    let left = r.left + window.scrollX;
+    const maxLeft = window.scrollX + window.innerWidth - pr.width - 8;
+    if (left > maxLeft) left = Math.max(8, maxLeft);
+    let top = r.bottom + window.scrollY + 4;
+    if (top + pr.height > window.scrollY + window.innerHeight) {
+      top = r.top + window.scrollY - pr.height - 4;
+    }
+    picker.style.left = left + "px";
+    picker.style.top = top + "px";
+    openPicker = picker;
+
+    setTimeout(() => {
+      document.addEventListener("click", onDocClickClosePicker, true);
+      document.addEventListener("keydown", onDocKeyClosePicker, true);
+    }, 0);
+  }
+
+  async function submitEdit(ctx, code) {
+    try {
+      const token = localStorage.getItem(TOKEN_KEY) || "";
+      const res = await fetch("/api/edit-day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Approve-Token": token },
+        body: JSON.stringify({ group_id: ctx.groupId, account_id: ctx.accountId, date: ctx.dateIso, code }),
+      });
+      if (res.status === 401) {
+        showTokenBanner(() => submitEdit(ctx, code));
+        return;
+      }
+      if (res.status === 403) {
+        alert("Editing is disabled on this server (no token configured).");
+        return;
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert("Failed: " + (d.detail || res.status));
+        return;
+      }
+      await fetchData();
+    } catch (err) {
+      alert("Failed: " + err);
     }
   }
 

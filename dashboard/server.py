@@ -1,8 +1,9 @@
-"""Read-only attendance web dashboard, one combined calendar table per team
-(Tracked Group), grouped by week. A background loop re-derives every
-NOT-approved week from the live Notion Capture Log on a timer; an approved
-week is frozen (served from the local cache, never recomputed) until
-un-approved. Viewing needs no auth; approving/un-approving a week needs
+"""Attendance web dashboard, one combined calendar table per team (Tracked
+Group), grouped by week. A background loop re-derives every NOT-approved
+week from the live Notion Capture Log on a timer; an approved week is frozen
+(served from the local cache, never recomputed) until un-approved. Viewing
+needs no auth; approving/un-approving a week and manually correcting a day
+cell (only possible while its week is not approved) both need
 DASHBOARD_APPROVE_TOKEN if one is configured.
 
 Run:  uvicorn dashboard.server:app --host 0.0.0.0 --port 8000
@@ -21,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 import attendance
 import config
+import notion
 import notionapprovals
 from dashboard import cache, notion_data
 
@@ -69,7 +71,7 @@ def _compute_week_table(group_records: dict, accounts: dict, week: dt.date) -> d
             continue  # this worker wasn't active this particular week
         acc = accounts.get(apid, {})
         name = acc.get("name") or acc.get("username") or apid[:8]
-        workers.append({"name": name, "username": acc.get("username"), "days": week_codes})
+        workers.append({"name": name, "username": acc.get("username"), "account_id": apid, "days": week_codes})
     workers.sort(key=lambda w: w["name"].lower())
     return {"days": day_isos, "workers": workers}
 
@@ -219,4 +221,97 @@ async def api_approve(request: Request, x_approve_token: str = Header(default=""
                 for week in team["weeks"]:
                     if week["week_start"] == week_start_str:
                         week["approved"] = approved
+    return {"ok": True}
+
+
+def _find_worker_display(team: dict, account_id: str) -> tuple[str, str | None]:
+    """Look up a worker's name/username from any OTHER week of this same team
+    in the current snapshot — needed when a manual edit adds a worker's first
+    record in a week where they previously had none, so that week's `workers`
+    list doesn't yet contain them."""
+    for week in team["weeks"]:
+        for w in week["table"]["workers"]:
+            if w.get("account_id") == account_id:
+                return w["name"], w.get("username")
+    return account_id[:8], None
+
+
+@app.post("/api/edit-day")
+async def api_edit_day(request: Request, x_approve_token: str = Header(default="")):
+    if config.DASHBOARD_APPROVE_TOKEN:
+        if x_approve_token != config.DASHBOARD_APPROVE_TOKEN:
+            raise HTTPException(status_code=401, detail="invalid or missing X-Approve-Token")
+    else:
+        raise HTTPException(status_code=403, detail="editing is disabled (no DASHBOARD_APPROVE_TOKEN configured)")
+
+    body = await request.json()
+    group_id = body.get("group_id")
+    account_id = body.get("account_id")
+    date_str = body.get("date")
+    code = (body.get("code") or "").strip().upper()  # "" means clear (no record)
+    if not (group_id and account_id and date_str):
+        raise HTTPException(status_code=400, detail="group_id, account_id and date are required")
+    if code and code not in attendance.CODE_INTENT:
+        raise HTTPException(status_code=400, detail=f"unknown code {code!r}")
+    try:
+        day = dt.date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    week_start_str = attendance.week_start(day).isoformat()
+    year_key = str(day.year)
+
+    # Authoritative check straight from Notion, NOT the in-memory snapshot: a
+    # concurrent background refresh can replace that snapshot with a fresh
+    # read at any moment, computed from a Notion state captured *before* a
+    # just-written approval landed — trusting it here would make this guard
+    # racy against the very thing it exists to prevent. (Found live: a manual
+    # test hit exactly this window and let an edit through against what the
+    # UI had just shown as an approved week.)
+    if notionapprovals.is_approved(group_id, week_start_str):
+        raise HTTPException(status_code=409, detail="this week is approved — un-approve it before editing")
+
+    notion.archive_day(account_id, date_str)
+    if code:
+        intent = attendance.CODE_INTENT[code]
+        ok, detail = notion.add_event(
+            {"captured_at": f"{date_str}T12:00:00", "text": "Manual correction via dashboard",
+             "intent": intent, "source": "manual", "confidence": 1.0, "dates": [date_str]},
+            account_page_id=account_id, group_page_id=group_id,
+        )
+        if not ok:
+            raise HTTPException(status_code=502, detail=f"failed to write to Notion: {detail}")
+
+    # Reflect immediately in the in-memory snapshot rather than waiting for the
+    # next refresh cycle (which can take a minute — the full Capture Log pull
+    # is slow), mirroring /api/approve's pattern. Purely cosmetic (the next
+    # poll or refresh cycle would show the correct state regardless), so
+    # unlike the approved-week check above, reading the in-memory snapshot
+    # here is fine even though it can occasionally be momentarily stale.
+    with _state_lock:
+        snapshot = _state["snapshot"]
+        team = None
+        if snapshot:
+            for t in snapshot["years"].get(year_key, {}).get("teams", []):
+                if t["group_id"] == group_id:
+                    team = t
+                    break
+        week = None
+        if team:
+            for w in team["weeks"]:
+                if w["week_start"] == week_start_str:
+                    week = w
+                    break
+        if snapshot and team is not None and week is not None:
+            worker = next((w for w in week["table"]["workers"] if w.get("account_id") == account_id), None)
+            if worker is None and code:
+                name, username = _find_worker_display(team, account_id)
+                worker = {"name": name, "username": username, "account_id": account_id, "days": {}}
+                week["table"]["workers"].append(worker)
+                week["table"]["workers"].sort(key=lambda w: w["name"].lower())
+            if worker is not None:
+                if code:
+                    worker["days"][date_str] = code
+                else:
+                    worker["days"].pop(date_str, None)
     return {"ok": True}

@@ -192,6 +192,45 @@ body {
 }
 .day-cell.weekend:not(.has-code) { background: color-mix(in srgb, var(--text-muted) 22%, transparent); }
 
+.day-cell.editable { cursor: pointer; }
+.day-cell.editable:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.edit-picker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 30;
+  min-width: 190px;
+}
+.edit-picker-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.edit-picker-opt:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.edit-picker-opt.current { font-weight: 700; }
+.edit-picker-swatch {
+  width: 20px; height: 20px; border-radius: 5px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 10.5px;
+}
+.edit-picker-clear { color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 3px; padding-top: 7px; border-radius: 0 0 5px 5px; }
+
 .empty-note { color: var(--text-muted); font-size: 13px; padding: 24px 4px; }
 
 .token-banner {
