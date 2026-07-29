@@ -118,9 +118,10 @@ EXIT_ON_RESTART: bool = _bool(os.getenv("EXIT_ON_RESTART"))
 # to need sub-minute latency, and it keeps steady-state Notion API load low as
 # the log grows over months. Lower it if you want snappier updates.
 DASHBOARD_REFRESH_SECONDS: int = int(os.getenv("DASHBOARD_REFRESH_SECONDS", "60"))
-# Shared secret required (as an X-Approve-Token header) to flip a week's
-# approved state. Viewing the dashboard itself needs no auth. Leave unset to
-# disable the approve endpoint entirely (view-only dashboard).
+# Shared secret required (as an X-Approve-Token header) for everything that
+# touches real attendance data: viewing (/api/data), approving/un-approving a
+# week, and editing a day cell. Leave unset and the dashboard has no data
+# access at all — it fails closed, not open.
 DASHBOARD_APPROVE_TOKEN: str = os.getenv("DASHBOARD_APPROVE_TOKEN", "").strip()
 
 
