@@ -246,7 +246,17 @@
 
   async function fetchData() {
     try {
-      const res = await fetch("/api/data", { cache: "no-store" });
+      const token = localStorage.getItem(TOKEN_KEY) || "";
+      const res = await fetch("/api/data", { cache: "no-store", headers: { "X-Approve-Token": token } });
+      if (res.status === 401) {
+        setStatus("error", "login required");
+        showTokenBanner(fetchData);
+        return;
+      }
+      if (res.status === 403) {
+        setStatus("error", "dashboard not configured on the server (no token set)");
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setStatus("error", data.error || "error");
@@ -267,9 +277,11 @@
   });
 
   function showTokenBanner(retryFn) {
-    let banner = document.querySelector(".token-banner");
-    if (banner) banner.remove();
-    banner = document.createElement("div");
+    // fetchData polls every 15s and would otherwise recreate this (stealing
+    // focus, dropping whatever's half-typed) on every single failed poll
+    // while the token prompt is still up — leave an existing one alone.
+    if (document.querySelector(".token-banner")) return;
+    const banner = document.createElement("div");
     banner.className = "token-banner";
     banner.innerHTML = `
       <span>Approve token:</span>

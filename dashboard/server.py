@@ -1,10 +1,12 @@
 """Attendance web dashboard, one combined calendar table per team (Tracked
 Group), grouped by week. A background loop re-derives every NOT-approved
 week from the live Notion Capture Log on a timer; an approved week is frozen
-(served from the local cache, never recomputed) until un-approved. Viewing
-needs no auth; approving/un-approving a week and manually correcting a day
-cell (only possible while its week is not approved) both need
-DASHBOARD_APPROVE_TOKEN if one is configured.
+(served from the local cache, never recomputed) until un-approved. The static
+shell (index.html, dashboard.js/css) has no auth — it carries no real data.
+Everything that does — /api/data, approving/un-approving a week, and
+manually correcting a day cell (only possible while its week is not
+approved) — requires DASHBOARD_APPROVE_TOKEN. If that env var isn't set, the
+dashboard has no data access at all (fails closed), not a public fallback.
 
 Run:  uvicorn dashboard.server:app --host 0.0.0.0 --port 8000
 """
@@ -160,13 +162,27 @@ app = FastAPI(title="2K Attendance Dashboard", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
+def _require_token(x_approve_token: str) -> None:
+    """Shared gate for every endpoint that touches real attendance data or
+    mutates it — viewing and editing use the same DASHBOARD_APPROVE_TOKEN, so
+    there's one secret to hand out, not two. The static shell (index.html,
+    dashboard.js/css) stays unauthenticated on purpose: it carries no real
+    data, just app code, so serving it doesn't need a token check — only
+    /api/data (the actual attendance) and the mutating endpoints do."""
+    if not config.DASHBOARD_APPROVE_TOKEN:
+        raise HTTPException(status_code=403, detail="dashboard access is not configured (no DASHBOARD_APPROVE_TOKEN set on the server)")
+    if x_approve_token != config.DASHBOARD_APPROVE_TOKEN:
+        raise HTTPException(status_code=401, detail="invalid or missing X-Approve-Token")
+
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 
 @app.get("/api/data")
-def api_data():
+def api_data(x_approve_token: str = Header(default="")):
+    _require_token(x_approve_token)
     with _state_lock:
         snapshot, error = _state["snapshot"], _state["error"]
     if snapshot is None:
@@ -179,11 +195,7 @@ def api_data():
 
 @app.post("/api/approve")
 async def api_approve(request: Request, x_approve_token: str = Header(default="")):
-    if config.DASHBOARD_APPROVE_TOKEN:
-        if x_approve_token != config.DASHBOARD_APPROVE_TOKEN:
-            raise HTTPException(status_code=401, detail="invalid or missing X-Approve-Token")
-    else:
-        raise HTTPException(status_code=403, detail="approving is disabled (no DASHBOARD_APPROVE_TOKEN configured)")
+    _require_token(x_approve_token)
 
     body = await request.json()
     group_id = body.get("group_id")
@@ -238,11 +250,7 @@ def _find_worker_display(team: dict, account_id: str) -> tuple[str, str | None]:
 
 @app.post("/api/edit-day")
 async def api_edit_day(request: Request, x_approve_token: str = Header(default="")):
-    if config.DASHBOARD_APPROVE_TOKEN:
-        if x_approve_token != config.DASHBOARD_APPROVE_TOKEN:
-            raise HTTPException(status_code=401, detail="invalid or missing X-Approve-Token")
-    else:
-        raise HTTPException(status_code=403, detail="editing is disabled (no DASHBOARD_APPROVE_TOKEN configured)")
+    _require_token(x_approve_token)
 
     body = await request.json()
     group_id = body.get("group_id")
