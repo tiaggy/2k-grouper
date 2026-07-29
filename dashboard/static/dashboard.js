@@ -209,6 +209,10 @@
     const yearData = data.years[selectedYear];
     if (!yearData) return;
 
+    // teamsEl.innerHTML = "" below wipes the whole subtree, which can reset
+    // the page's own vertical scroll depending on how the browser reflows —
+    // capture it now and restore it once the rebuild is done.
+    const pageScrollY = window.scrollY;
     const scrollByTeam = new Map();
     for (const el of teamsEl.querySelectorAll(".team")) {
       scrollByTeam.set(el.dataset.groupId, el.querySelector(".table-scroll").scrollLeft);
@@ -219,6 +223,7 @@
     if (yearData.teams.length === 0) {
       teamsEl.innerHTML = '<p class="empty-note">No teams with attendance data in ' + selectedYear + '.</p>';
       centeredYear = selectedYear;
+      window.scrollTo(0, pageScrollY);
       return;
     }
     for (const team of yearData.teams) {
@@ -235,6 +240,7 @@
       }
     }
     centeredYear = selectedYear;
+    window.scrollTo(0, pageScrollY);
   }
 
   function setStatus(kind, text) {
