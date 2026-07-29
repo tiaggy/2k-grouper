@@ -144,28 +144,6 @@ def set_last_msg(page_id: str, msg_id: int) -> bool:
         return False
 
 
-def disable_tracked_group(chat_id: int) -> bool:
-    """Untrack a group by unchecking `Enabled` on its Tracked Groups row (kept, not
-    deleted, so its Client relation and the Capture Log history links survive).
-    Returns True if a row was found and updated. Best-effort."""
-    db = config.NOTION_TRACKED_DB_ID or config.NOTION_CONFIG_DB_ID
-    if not (config.NOTION_TOKEN and db):
-        return False
-    try:
-        r = _send("POST", f"https://api.notion.com/v1/databases/{db}/query",
-                  json={"filter": {"property": "ID", "number": {"equals": chat_id}}, "page_size": 5})
-        r.raise_for_status()
-        updated = False
-        for pg in r.json().get("results", []):
-            pr = _send("PATCH", f"https://api.notion.com/v1/pages/{pg['id']}",
-                       json={"properties": {"Enabled": {"checkbox": False}}})
-            updated = updated or pr.status_code == 200
-        return updated
-    except Exception as exc:
-        print(f"[notionconfig] disable_tracked_group failed: {exc!r}")
-        return False
-
-
 def add_tracked_group(chat_id: int, title: str | None) -> None:
     """Persist a newly-enrolled group as a row in the Tracked Groups DB (Client
     relation left blank for you to fill in). If a row already exists, re-enable it

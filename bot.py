@@ -531,16 +531,15 @@ def handle_my_chat_member(mcm: dict) -> None:
             log(f"[enroll] bot added to chat_id={chat_id} by non-owner {who} — NOT tracking")
 
     elif new_status in _LEFT:
-        # Bot removed/kicked. Drop it locally and untrack it in Notion (uncheck
-        # Enabled on the Tracked Groups row — the row, its Client relation, and the
-        # Capture Log history stay intact; capture just stops).
-        if chat_id in _notion_tracked:
-            _notion_tracked.discard(chat_id)
-            _group_pages.pop(chat_id, None)
-            tracking.save(_notion_tracked)
-            ok = notionconfig.disable_tracked_group(chat_id)
-            log(f"[enroll] removed from chat_id={chat_id} title={title!r} — untracked "
-                + ("(disabled its Notion row)" if ok else "locally (Notion row not found/updated)"))
+        # Bot removed/kicked. Deliberately NOT auto-untracking here anymore: a
+        # my_chat_member 'left' event apparently misfired once for a real,
+        # still-active group and silently disabled its Notion row, dropping a
+        # client's attendance capture for hours before anyone noticed. Untracking
+        # a group is now a manual-only action (uncheck Enabled on its Tracked
+        # Groups row in Notion yourself) — this just logs so it's visible instead
+        # of acted on automatically.
+        log(f"[enroll] bot no longer a member of chat_id={chat_id} title={title!r} "
+            f"(status={new_status!r}) — tracking left as-is; untrack manually in Notion if intended")
 
 
 # --- Owner commands (private DM with the bot) ------------------------------
