@@ -52,6 +52,38 @@ def load() -> dict | None:
         return None
 
 
+def load_paused() -> set | None:
+    """Set of user ids with tracking paused (Telegram Accounts -> Paused
+    checkbox), or None on failure (caller keeps the previous set rather than
+    treating a transient Notion error as "nobody is paused"). {} if the
+    property doesn't exist yet (a fresh setup) or Notion is unconfigured —
+    same graceful-degradation as everything else keyed off an optional
+    property in this project."""
+    if not (config.NOTION_TOKEN and config.NOTION_ACCOUNTS_DB_ID):
+        return set()
+    out: set = set()
+    cursor = None
+    try:
+        while True:
+            body: dict = {"page_size": 100, "filter": {"property": "Paused", "checkbox": {"equals": True}}}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = _send("POST", f"https://api.notion.com/v1/databases/{config.NOTION_ACCOUNTS_DB_ID}/query", json=body)
+            r.raise_for_status()
+            d = r.json()
+            for pg in d.get("results", []):
+                idv = (pg.get("properties", {}).get("User ID", {}) or {}).get("number")
+                if idv is not None:
+                    out.add(int(idv))
+            if not d.get("has_more"):
+                break
+            cursor = d.get("next_cursor")
+        return out
+    except Exception as exc:
+        print(f"[accounts] load_paused failed: {exc!r}")
+        return None
+
+
 def _find(user_id: int) -> str | None:
     """Page id of the row with this User ID, if it exists."""
     try:

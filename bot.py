@@ -52,6 +52,7 @@ _ignored: set = set()              # user ids whose messages are skipped
 _notion_tracked: set = set()       # tracked group chat ids
 _accounts: dict = {}               # user_id -> Telegram Accounts page id
 _group_pages: dict = {}            # chat_id -> Tracked Groups page id
+_paused_accounts: set = set()      # user ids with tracking paused (no new capture)
 _last_cfg_refresh: float = 0.0
 
 _group_last_msg: dict = {}         # chat_id -> last processed Telegram message_id
@@ -474,11 +475,14 @@ def _ensure_account_page(user_id, frm: dict) -> str | None:
 def load_notion_config() -> bool:
     """Refresh owners / ignored / tracked groups / account & group page maps from
     Notion. Falls back to the .env owner so a Notion outage can't lock the owner out."""
-    global _owners, _ignored, _notion_tracked, _accounts, _group_pages, _last_cfg_refresh
+    global _owners, _ignored, _notion_tracked, _accounts, _group_pages, _paused_accounts, _last_cfg_refresh
     _last_cfg_refresh = time.monotonic()
     acc = notionaccounts.load()
     if acc is not None:
         _accounts = acc
+    paused = notionaccounts.load_paused()
+    if paused is not None:
+        _paused_accounts = paused
     gp = notionconfig.tracked_pages()
     if gp is not None:
         _group_pages = gp
@@ -743,6 +747,14 @@ def handle_message(msg: dict) -> None:
         _progress_dirty[chat_id] = mid
     if user_id in _ignored:
         return  # ignored user (manager/owner/etc.) — no account, don't capture
+    if user_id in _paused_accounts:
+        # Tracking paused for this person (Telegram Accounts -> Paused
+        # checkbox, toggled from the dashboard or directly in Notion) — their
+        # account and history stay intact, just no new rows while paused.
+        # Logged (not silent) — a past incident here taught us silent skips
+        # go unnoticed for hours.
+        log(f"[paused] skipping message from user_id={user_id} (tracking paused for this person)")
+        return
     if not text.strip():
         return  # stickers, photos w/o caption, service messages, etc.
     account_pid = _ensure_account_page(user_id, frm)  # register/resolve the account

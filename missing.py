@@ -8,7 +8,8 @@ has *no* row dated D and (optionally) their Person is Hired, we write one row:
   Intent -> "missing", Source -> "auto".
 
 Idempotent: the row it writes counts as "a record for D", so re-running the same
-date adds nothing. Weekends are skipped. Owners / ignored users are skipped.
+date adds nothing. Weekends are skipped. Owners / ignored users are skipped, as is
+anyone with tracking paused (Telegram Accounts -> Paused checkbox).
 
     py missing.py                 # today (local), if a weekday
     py missing.py 2026-07-10      # one date
@@ -23,6 +24,7 @@ import time
 import config
 import notion
 import notion_http
+import notionaccounts
 import notionconfig
 
 _HIRED_VALUES = {v.strip().lower() for v in config.MISSING_HIRED_VALUES.split(",") if v.strip()}
@@ -152,6 +154,7 @@ def sweep(day: dt.date, log=print) -> dict:
 
     cfg = notionconfig.load() or {}
     skip_uids = (cfg.get("ignored") or set()) | (cfg.get("owners") or set())
+    skip_uids |= notionaccounts.load_paused() or set()  # tracking paused -> no missing rows either
 
     roster = _roster(day, config.MISSING_ROSTER_LOOKBACK_DAYS)
     accounts = _accounts_map()
