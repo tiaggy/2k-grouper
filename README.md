@@ -62,6 +62,11 @@ publishes no ports, and the Docker + UFW firewall gotcha) and
   `../new_msgs`) through the live classification rules and reconcile the
   Capture Log to match. Resumable, rate-limit-safe; useful for rebuilding after
   a schema change or backfilling an export.
+- `py export_calendars.py [--all] [--out DIR]` — write one local `.xlsx` per
+  hired worker (default `calendars/`, gitignored — never commit these, they
+  hold real names and attendance/sick/vacation data), a year-by-year calendar
+  styled after the original vacation-tracker spreadsheet. Needs `openpyxl`
+  (`pip install -r requirements.txt`).
 
 ## Project layout
 

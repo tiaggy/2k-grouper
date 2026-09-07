@@ -10,8 +10,12 @@ dashboard_msg.json
 tracked_cache.json
 *.out
 
-# Maintenance/offline tool not needed in the running container (see README.md)
+# Maintenance/offline tools not needed in the running container (see README.md)
 simulate_bot.py
+export_calendars.py
+calendars/
+calendars_*/
+*.xlsx
 
 # Python / VCS / docs
 __pycache__/
