@@ -10,6 +10,12 @@ progress.json
 spool.jsonl
 *.out
 
+# Generated per-worker calendar exports (export_calendars.py) — contain real
+# worker names + attendance/sick/vacation data. Never commit these.
+calendars/
+calendars_*/
+*.xlsx
+
 # Python
 __pycache__/
 *.py[cod]
